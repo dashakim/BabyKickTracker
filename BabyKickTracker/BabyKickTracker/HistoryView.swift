@@ -4,71 +4,109 @@ struct HistoryView: View {
     @StateObject private var storage = KickStorage.shared
     @State private var viewMode: ViewMode = .allKicks
 
-    enum ViewMode: Hashable {
-        case allKicks, sessions
+    enum ViewMode: String, CaseIterable {
+        case allKicks = "All Kicks"
+        case sessions = "Sessions"
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Toggle
-                Picker("View Mode", selection: $viewMode) {
-                    Text("All Kicks").tag(ViewMode.allKicks)
-                    Text("Sessions").tag(ViewMode.sessions)
-                }
-                .pickerStyle(.segmented)
-                .padding()
+        NavigationView {
+            ZStack {
+                Theme.background.ignoresSafeArea()
 
-                // Content
-                if viewMode == .allKicks {
-                    allKicksView
-                } else {
-                    sessionsView
+                VStack(spacing: 0) {
+                    // Segmented control
+                    Picker("View Mode", selection: $viewMode) {
+                        ForEach(ViewMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(Color.white)
+
+                    // Content
+                    ScrollView {
+                        if viewMode == .allKicks {
+                            allKicksView
+                        } else {
+                            sessionsView
+                        }
+                    }
                 }
             }
-            .navigationTitle("Kick History")
+            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.large)
         }
     }
 
     private var allKicksView: some View {
-        ScrollView {
+        VStack(spacing: 16) {
             if storage.kicks.isEmpty {
-                emptyView(message: "No kicks recorded yet")
+                emptyStateView(
+                    icon: "clock.arrow.circlepath",
+                    title: "No Kicks Yet",
+                    message: "Start logging kicks from the Home tab"
+                )
             } else {
-                LazyVStack(spacing: 15) {
-                    ForEach(groupedKicks, id: \.key) { entry in
-                        DaySection(date: entry.key, kicks: entry.value)
+                LazyVStack(spacing: 16) {
+                    ForEach(Array(groupedKicks.enumerated()), id: \.offset) { _, item in
+                        ModernDaySection(date: item.key, kicks: item.value)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 20)
             }
         }
     }
 
     private var sessionsView: some View {
-        ScrollView {
+        VStack(spacing: 16) {
             if storage.sessions.isEmpty {
-                emptyView(message: "No meal sessions recorded yet")
+                emptyStateView(
+                    icon: "clock.badge.checkmark",
+                    title: "No Sessions Yet",
+                    message: "Start a 2-hour session from the Sessions tab"
+                )
             } else {
-                LazyVStack(spacing: 15) {
-                    ForEach(Array(storage.sessions.reversed()), id: \.id) { session in
-                        SessionCard(session: session)
+                LazyVStack(spacing: 16) {
+                    ForEach(storage.sessions.reversed()) { session in
+                        ModernSessionCard(session: session)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 20)
             }
         }
     }
 
-    private func emptyView(message: String) -> some View {
-        VStack(alignment: .center) {
-            Text(message)
-                .foregroundColor(.gray)
-                .italic()
-                .multilineTextAlignment(.center)
-                .padding(.vertical, 40)
+    private func emptyStateView(icon: String, title: String, message: String) -> some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Theme.primaryLight.opacity(0.3))
+                    .frame(width: 100, height: 100)
+
+                Image(systemName: icon)
+                    .font(.system(size: 42))
+                    .foregroundColor(Theme.primary)
+            }
+            .padding(.top, 60)
+
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(Theme.textPrimary)
+
+                Text(message)
+                    .font(.system(size: 14))
+                    .foregroundColor(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
 
     private var groupedKicks: [(key: Date, value: [Kick])] {
@@ -80,111 +118,227 @@ struct HistoryView: View {
     }
 }
 
-struct DaySection: View {
+struct ModernDaySection: View {
     let date: Date
     let kicks: [Kick]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(date, format: Date.FormatStyle.dateTime.weekday(.wide).month(.abbreviated).day().year())
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            // Header
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(date.formatted(date: .long, time: .omitted))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+
+                    Text(date.formatted(.dateTime.year()))
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.textSecondary)
+                }
+
                 Spacer()
-                Text("\(kicks.count) kicks")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.pink)
-            }
 
-            ForEach(kicks.sorted(by: { $0.timestamp > $1.timestamp })) { kick in
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(Color.pink)
-                        .frame(width: 8, height: 8)
-
-                    Text(kick.timestamp, style: .time)
-                        .font(.body)
-                }
-                .padding(.leading, 8)
-            }
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 3)
-    }
-}
-
-struct SessionCard: View {
-    let session: MealSession
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Meal Session")
-                    .font(.headline)
-                Spacer()
-                if session.isActive {
-                    Text("ACTIVE")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.green)
-                        .cornerRadius(5)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Started: \(session.mealTime, format: Date.FormatStyle.dateTime.month(.abbreviated).day().year().hour().minute())")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                Text("Ends: \(session.endTime, format: Date.FormatStyle.dateTime.hour().minute())")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-
-            // Stats
-            HStack {
-                VStack(spacing: 4) {
-                    Text("\(session.kicks.count)")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.pink)
-                    Text("Kicks")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.gray.opacity(0.05))
-                .cornerRadius(8)
+                // Count badge
+                Text("\(kicks.count)")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(Theme.primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Theme.primaryLight)
+                    .cornerRadius(8)
             }
 
             // Kicks list
-            if !session.kicks.isEmpty {
-                Divider()
+            VStack(spacing: 0) {
+                ForEach(Array(kicks.sorted(by: { $0.timestamp > $1.timestamp }).enumerated()), id: \.element.id) { index, kick in
+                    HStack(spacing: 12) {
+                        // Dot
+                        ZStack {
+                            Circle()
+                                .fill(Theme.primaryLight.opacity(0.5))
+                                .frame(width: 24, height: 24)
 
-                Text("Kicks in this session:")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.gray)
+                            Circle()
+                                .fill(Theme.primary)
+                                .frame(width: 8, height: 8)
+                        }
 
-                ForEach(session.kicks) { kick in
-                    HStack {
-                        Text("•")
+                        // Time
                         Text(kick.timestamp, style: .time)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(Theme.textPrimary)
+
+                        Spacer()
+
+                        // Session indicator
+                        if kick.sessionId != nil {
+                            Image(systemName: "clock.badge.checkmark.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Theme.secondary)
+                        }
                     }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .padding(.vertical, 12)
+
+                    if index < kicks.count - 1 {
+                        Divider()
+                            .padding(.leading, 36)
+                    }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(radius: 3)
+        .padding(20)
+        .cardStyle()
+    }
+}
+
+struct ModernSessionCard: View {
+    let session: MealSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Session")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Theme.textPrimary)
+
+                    Text(session.mealTime.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 13))
+                        .foregroundColor(Theme.textSecondary)
+                }
+
+                Spacer()
+
+                if session.isActive {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Theme.success)
+                            .frame(width: 6, height: 6)
+
+                        Text("Active")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.success)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Theme.successLight)
+                    .cornerRadius(12)
+                }
+            }
+
+            // Stats
+            HStack(spacing: 12) {
+                // Kicks count
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.primary)
+
+                        Text("Kicks")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+
+                    Text("\(session.kicks.count)")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.primaryLight.opacity(0.3))
+                .cornerRadius(10)
+
+                // Duration
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.secondary)
+
+                        Text("Duration")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textSecondary)
+                    }
+
+                    Text("2 hours")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(Theme.textPrimary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.secondaryLight.opacity(0.5))
+                .cornerRadius(10)
+            }
+
+            // Kicks timeline (if any)
+            if !session.kicks.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Timeline")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Theme.textSecondary)
+
+                    FlowLayout(spacing: 8) {
+                        ForEach(session.kicks) { kick in
+                            Text(kick.timestamp, style: .time)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Theme.primary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Theme.primaryLight.opacity(0.5))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .cardStyle()
+    }
+}
+
+// Flow layout for tags
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = FlowResult(in: proposal.replacingUnspecifiedDimensions().width, subviews: subviews, spacing: spacing)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(at: CGPoint(x: bounds.minX + result.frames[index].minX, y: bounds.minY + result.frames[index].minY), proposal: .unspecified)
+        }
+    }
+
+    struct FlowResult {
+        var frames: [CGRect] = []
+        var size: CGSize = .zero
+
+        init(in maxWidth: CGFloat, subviews: Subviews, spacing: CGFloat) {
+            var currentX: CGFloat = 0
+            var currentY: CGFloat = 0
+            var lineHeight: CGFloat = 0
+
+            for subview in subviews {
+                let size = subview.sizeThatFits(.unspecified)
+
+                if currentX + size.width > maxWidth && currentX > 0 {
+                    currentX = 0
+                    currentY += lineHeight + spacing
+                    lineHeight = 0
+                }
+
+                frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
+                lineHeight = max(lineHeight, size.height)
+                currentX += size.width + spacing
+            }
+
+            self.size = CGSize(width: maxWidth, height: currentY + lineHeight)
+        }
     }
 }
 

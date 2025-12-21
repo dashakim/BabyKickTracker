@@ -6,9 +6,11 @@ class KickStorage: ObservableObject {
 
     @Published var kicks: [Kick] = []
     @Published var sessions: [MealSession] = []
+    @Published var babyName: String = ""
 
     private let kicksKey = "baby_kicks"
     private let sessionsKey = "meal_sessions"
+    private let babyNameKey = "baby_name"
 
     private init() {
         loadData()
@@ -26,6 +28,14 @@ class KickStorage: ObservableObject {
            let decoded = try? JSONDecoder().decode([MealSession].self, from: data) {
             sessions = decoded
         }
+
+        // Load baby name
+        babyName = UserDefaults.standard.string(forKey: babyNameKey) ?? ""
+    }
+
+    func saveBabyName(_ name: String) {
+        babyName = name
+        UserDefaults.standard.set(name, forKey: babyNameKey)
     }
 
     func saveKick(_ kick: Kick) {

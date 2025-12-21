@@ -1,6 +1,15 @@
 import SwiftUI
 
 struct ContentView: View {
+    init() {
+        // Customize tab bar appearance
+        let appearance = UITabBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor.white
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
     var body: some View {
         TabView {
             HomeView()
@@ -10,15 +19,15 @@ struct ContentView: View {
 
             SessionsView()
                 .tabItem {
-                    Label("Sessions", systemImage: "timer")
+                    Label("Sessions", systemImage: "clock.fill")
                 }
 
             HistoryView()
                 .tabItem {
-                    Label("History", systemImage: "chart.bar.fill")
+                    Label("History", systemImage: "chart.xyaxis.line")
                 }
         }
-        .accentColor(.pink)
+        .accentColor(Theme.primary)
     }
 }
 

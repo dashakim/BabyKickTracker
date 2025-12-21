@@ -13,7 +13,7 @@ struct ContentView: View {
                 VStack(spacing: 4) {
                     Text("Session Active")
                         .font(.caption2)
-                        .foregroundColor(.green)
+                        .foregroundColor(Color(red: 0.64, green: 0.91, blue: 0.80))
                     Text("\(session.kickCount) kicks")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -27,7 +27,15 @@ struct ContentView: View {
             Button(action: logKick) {
                 ZStack {
                     Circle()
-                        .fill(justTapped ? Color.green : Color.pink)
+                        .fill(
+                            LinearGradient(
+                                colors: justTapped ?
+                                    [Color(red: 0.64, green: 0.91, blue: 0.80), Color(red: 0.54, green: 0.81, blue: 0.70)] :
+                                    [Color(red: 1.0, green: 0.71, blue: 0.82), Color(red: 0.98, green: 0.56, blue: 0.73)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .frame(width: 120, height: 120)
                         .scaleEffect(justTapped ? 1.1 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.6), value: justTapped)
@@ -71,7 +79,14 @@ struct ContentView: View {
 
         // Visual feedback
         justTapped = true
-        WKInterfaceDevice.current().play(.success)
+
+        // Haptic vibration feedback
+        WKInterfaceDevice.current().play(.click)
+
+        // Additional vibration after a short delay for emphasis
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            WKInterfaceDevice.current().play(.success)
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             justTapped = false

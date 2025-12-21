@@ -6,157 +6,229 @@ struct SessionsView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    Text("Track baby kicks within 2 hours after eating")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+            ZStack {
+                Theme.background.ignoresSafeArea()
 
-                    if let session = storage.activeSession {
-                        // Active session view
-                        VStack(spacing: 20) {
-                            HStack {
-                                Text("Active Session")
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 8, height: 8)
-                                    Text("Tracking")
-                                        .font(.subheadline)
-                                        .foregroundColor(.green)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Info header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Track kicks for 2 hours after meals when baby is most active.")
+                                .font(.system(size: 14))
+                                .foregroundColor(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+
+                        if let session = storage.activeSession {
+                            // Active session view
+                            VStack(spacing: 20) {
+                                // Session header
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Active Session")
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(Theme.textPrimary)
+
+                                        Text("Started at \(session.mealTime, style: .time)")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(Theme.textSecondary)
+                                    }
+
+                                    Spacer()
+
+                                    // Status badge
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(Theme.success)
+                                            .frame(width: 8, height: 8)
+
+                                        Text("Tracking")
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(Theme.success)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Theme.successLight)
+                                    .cornerRadius(20)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.green.opacity(0.1))
-                                .cornerRadius(20)
-                            }
+                                .padding(20)
+                                .cardStyle()
 
-                            VStack(spacing: 12) {
-                                TimeCard(label: "Started", time: session.mealTime)
-                                TimeCard(label: "Ends", time: session.endTime)
-                            }
+                                // Progress circle
+                                ZStack {
+                                    // Background circle
+                                    Circle()
+                                        .stroke(Theme.primaryLight, lineWidth: 12)
+                                        .frame(width: 160, height: 160)
 
-                            // Progress bar
-                            VStack(spacing: 8) {
-                                GeometryReader { geometry in
-                                    ZStack(alignment: .leading) {
-                                        Rectangle()
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(height: 10)
-                                            .cornerRadius(5)
+                                    // Progress circle
+                                    Circle()
+                                        .trim(from: 0, to: progress(for: session))
+                                        .stroke(
+                                            LinearGradient(
+                                                colors: [Theme.primary, Theme.secondary],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                                        )
+                                        .frame(width: 160, height: 160)
+                                        .rotationEffect(.degrees(-90))
+                                        .animation(.easeInOut, value: progress(for: session))
 
-                                        Rectangle()
-                                            .fill(Color.pink)
-                                            .frame(width: geometry.size.width * progress(for: session), height: 10)
-                                            .cornerRadius(5)
+                                    // Center content
+                                    VStack(spacing: 8) {
+                                        Text("\(session.kicks.count)")
+                                            .font(.system(size: 48, weight: .bold))
+                                            .foregroundColor(Theme.textPrimary)
+
+                                        Text("kicks")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(Theme.textSecondary)
                                     }
                                 }
-                                .frame(height: 10)
+                                .padding(.vertical, 20)
 
-                                Text(timeRemaining(for: session))
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.gray)
+                                // Time remaining
+                                VStack(spacing: 8) {
+                                    HStack(spacing: 16) {
+                                        VStack(spacing: 4) {
+                                            Text(timeRemaining(for: session))
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(Theme.textPrimary)
+                                            Text("Remaining")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(Theme.textSecondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(Theme.cardBackground)
+                                        .cornerRadius(12)
+
+                                        VStack(spacing: 4) {
+                                            Text(session.endTime, style: .time)
+                                                .font(.system(size: 18, weight: .semibold))
+                                                .foregroundColor(Theme.textPrimary)
+                                            Text("Ends at")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(Theme.textSecondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(Theme.cardBackground)
+                                        .cornerRadius(12)
+                                    }
+                                }
+                                .padding(20)
+                                .background(Theme.primaryLight.opacity(0.3))
+                                .cornerRadius(16)
+
+                                // Tip
+                                HStack(spacing: 12) {
+                                    Image(systemName: "lightbulb.fill")
+                                        .foregroundColor(Theme.secondary)
+
+                                    Text("Log kicks from the Home tab during this session")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(Theme.textSecondary)
+                                }
+                                .padding(16)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Theme.secondaryLight)
+                                .cornerRadius(12)
                             }
+                            .padding(.horizontal, 20)
 
-                            // Kick count
-                            VStack(spacing: 8) {
-                                Text("\(session.kicks.count)")
-                                    .font(.system(size: 48, weight: .bold))
-                                    .foregroundColor(.pink)
-                                Text("Kicks in this session")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.pink.opacity(0.05))
-                            .cornerRadius(12)
+                        } else {
+                            // No session - Start button
+                            VStack(spacing: 24) {
+                                // Empty state illustration
+                                ZStack {
+                                    Circle()
+                                        .fill(Theme.primaryLight.opacity(0.3))
+                                        .frame(width: 120, height: 120)
 
-                            // Info box
-                            HStack(spacing: 12) {
-                                Image(systemName: "info.circle.fill")
-                                    .foregroundColor(.blue)
-                                Text("Continue logging kicks from the Home screen. They will be automatically tracked in this session.")
-                                    .font(.footnote)
-                                    .foregroundColor(.blue)
-                            }
-                            .padding()
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                        .padding()
-                        .background(Color(.systemBackground))
-                        .cornerRadius(15)
-                        .shadow(radius: 5)
-                        .padding()
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(Theme.primary)
+                                }
+                                .padding(.top, 20)
 
-                    } else {
-                        // No session view
-                        VStack(spacing: 20) {
-                            Text("⏱️")
-                                .font(.system(size: 60))
-                                .padding(.top, 40)
+                                VStack(spacing: 12) {
+                                    Text("No Active Session")
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundColor(Theme.textPrimary)
 
-                            Text("No active session")
-                                .font(.title2)
-                                .fontWeight(.bold)
+                                    Text("Start tracking kicks after your next meal")
+                                        .font(.system(size: 15))
+                                        .foregroundColor(Theme.textSecondary)
+                                        .multilineTextAlignment(.center)
+                                }
 
-                            Text("Start a 2-hour tracking session after your next meal")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
+                                // Start button
+                                Button(action: { showingMealTimePicker = true }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "play.fill")
+                                            .font(.system(size: 16))
 
-                            Button(action: { showingMealTimePicker = true }) {
-                                Text("Start Session")
-                                    .font(.headline)
+                                        Text("Start 2-Hour Session")
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
                                     .foregroundColor(.white)
-                                    .padding(.horizontal, 40)
-                                    .padding(.vertical, 15)
-                                    .background(Color.pink)
-                                    .cornerRadius(25)
-                                    .shadow(radius: 5)
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 16)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Theme.primary, Theme.primaryDark],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(14)
+                                    .shadow(color: Theme.primary.opacity(0.3), radius: 12, x: 0, y: 6)
+                                }
+                                .padding(.top, 8)
                             }
-                            .padding(.top, 20)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 40)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(40)
-                        .background(Color(.systemBackground))
-                        .cornerRadius(15)
-                        .shadow(radius: 5)
-                        .padding()
+
+                        // Info section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("About Meal Sessions")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(Theme.textPrimary)
+
+                            VStack(spacing: 12) {
+                                InfoRow(
+                                    icon: "fork.knife",
+                                    text: "Baby is most active 1-2 hours after you eat due to increased blood sugar"
+                                )
+
+                                InfoRow(
+                                    icon: "chart.line.uptrend.xyaxis",
+                                    text: "Track patterns and share session data with your healthcare provider"
+                                )
+
+                                InfoRow(
+                                    icon: "bell.fill",
+                                    text: "All kicks logged during the session will be automatically tracked"
+                                )
+                            }
+                        }
+                        .padding(20)
+                        .cardStyle()
+                        .padding(.horizontal, 20)
                     }
-
-                    // Info section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("About Meal Sessions")
-                            .font(.headline)
-
-                        Text("Doctors often recommend tracking baby kicks for 2 hours after meals, when the baby is typically most active due to increased blood sugar levels.")
-                            .font(.footnote)
-                            .foregroundColor(.gray)
-
-                        Text("During a session, all kicks you log will be associated with that meal time, helping you and your healthcare provider track patterns.")
-                            .font(.footnote)
-                            .foregroundColor(.gray)
-                    }
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .cornerRadius(15)
-                    .shadow(radius: 5)
-                    .padding()
+                    .padding(.vertical, 20)
                 }
-                .padding(.vertical)
             }
-            .navigationTitle("Meal Sessions")
+            .navigationTitle("Sessions")
+            .navigationBarTitleDisplayMode(.large)
             .alert("Start Session", isPresented: $showingMealTimePicker) {
-                Button("Just now") {
+                Button("Just finished eating") {
                     _ = storage.startSession(mealTime: Date())
                 }
                 Button("Cancel", role: .cancel) { }
@@ -175,31 +247,30 @@ struct SessionsView: View {
     private func timeRemaining(for session: MealSession) -> String {
         let diff = session.endTime.timeIntervalSinceNow
         if diff <= 0 {
-            return "Session ended"
+            return "Ended"
         }
         let hours = Int(diff) / 3600
         let minutes = (Int(diff) % 3600) / 60
-        return "\(hours)h \(minutes)m remaining"
+        return "\(hours)h \(minutes)m"
     }
 }
 
-struct TimeCard: View {
-    let label: String
-    let time: Date
+struct InfoRow: View {
+    let icon: String
+    let text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.subheadline)
-                .foregroundColor(.gray)
-            Text(time, style: .time)
-                .font(.title3)
-                .fontWeight(.bold)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(Theme.primary)
+                .frame(width: 24)
+
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundColor(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(10)
     }
 }
 

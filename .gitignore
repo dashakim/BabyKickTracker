@@ -38,3 +38,6 @@ fastlane/test_output
 
 # Code Injection
 iOSInjectionProject/
+
+# Claude development notes (not for version control)
+.claude-notes.md
