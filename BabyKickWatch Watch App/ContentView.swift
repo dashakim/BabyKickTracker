@@ -5,9 +5,16 @@ struct ContentView: View {
     @StateObject private var kickManager = KickManager.shared
     @State private var justTapped = false
     @State private var kickCount = 0
+    @State private var rippleScale: CGFloat = 0
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        VStack {
+        ZStack {
+            // Adaptive background for dark mode
+            (colorScheme == .dark ? Color(red: 0.12, green: 0.11, blue: 0.13) : Color.black)
+                .ignoresSafeArea()
+
+            VStack {
             if let session = kickManager.activeSession {
                 // Active session indicator
                 VStack(spacing: 4) {
@@ -23,36 +30,46 @@ struct ContentView: View {
 
             Spacer()
 
-            // Main tap button
+            // Main tap button - gentle and comforting
             Button(action: logKick) {
                 ZStack {
+                    // Ripple on tap
+                    if justTapped {
+                        Circle()
+                            .stroke(Color(red: 1.0, green: 0.71, blue: 0.82).opacity(0.4), lineWidth: 1.5)
+                            .frame(width: 100, height: 100)
+                            .scaleEffect(rippleScale)
+                            .opacity(2 - rippleScale)
+                    }
+
                     Circle()
                         .fill(
-                            LinearGradient(
-                                colors: justTapped ?
-                                    [Color(red: 0.64, green: 0.91, blue: 0.80), Color(red: 0.54, green: 0.81, blue: 0.70)] :
-                                    [Color(red: 1.0, green: 0.71, blue: 0.82), Color(red: 0.98, green: 0.56, blue: 0.73)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                            RadialGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.71, blue: 0.82).opacity(0.95),
+                                    Color(red: 1.0, green: 0.71, blue: 0.82)
+                                ],
+                                center: .center,
+                                startRadius: 15,
+                                endRadius: 50
                             )
                         )
-                        .frame(width: 120, height: 120)
-                        .scaleEffect(justTapped ? 1.1 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: justTapped)
+                        .frame(width: 100, height: 100)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                .blur(radius: 2)
+                        )
 
-                    VStack(spacing: 4) {
-                        Text("TAP")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-
-                        if justTapped {
-                            Text("✓")
-                                .font(.title3)
-                                .foregroundColor(.white)
-                        }
-                    }
+                    // Pregnant person icon
+                    Image("footprints")
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundColor(.white.opacity(0.95))
+                        .frame(width: 45, height: 45)
                 }
+                .scaleEffect(justTapped ? 0.92 : 1.0)
+                .animation(.spring(response: 0.35, dampingFraction: 0.65), value: justTapped)
             }
             .buttonStyle(.plain)
 
@@ -68,6 +85,7 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
             }
             .padding(.bottom, 8)
+            }
         }
         .onAppear {
             kickManager.loadData()
@@ -88,8 +106,14 @@ struct ContentView: View {
             WKInterfaceDevice.current().play(.success)
         }
 
+        // Ripple effect
+        withAnimation(.easeOut(duration: 1.2)) {
+            rippleScale = 2.0
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             justTapped = false
+            rippleScale = 0
         }
     }
 }

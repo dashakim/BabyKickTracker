@@ -12,7 +12,7 @@ struct HistoryView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                Theme.background.ignoresSafeArea(edges: .bottom)
 
                 VStack(spacing: 0) {
                     // Segmented control

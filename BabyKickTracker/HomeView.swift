@@ -5,11 +5,13 @@ struct HomeView: View {
     @State private var justTapped = false
     @State private var showingNameAlert = false
     @State private var nameInput = ""
+    @State private var showFeedback = false
+    @State private var rippleScale: CGFloat = 0
 
     var body: some View {
         NavigationView {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                Theme.background.ignoresSafeArea(edges: .bottom)
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -68,40 +70,67 @@ struct HomeView: View {
                             .padding(.horizontal, 20)
                         }
 
-                        // Main tap button
+                        // Main tap button - redesigned for emotional comfort
                         Button(action: logKick) {
-                            VStack(spacing: 12) {
+                            VStack(spacing: 16) {
                                 ZStack {
+                                    // Ripple effect on tap
+                                    if justTapped {
+                                        Circle()
+                                            .stroke(Theme.primary.opacity(0.3), lineWidth: 2)
+                                            .frame(width: 150, height: 150)
+                                            .scaleEffect(rippleScale)
+                                            .opacity(2 - rippleScale)
+                                    }
+
+                                    // Main circle with subtle gradient and inner glow
                                     Circle()
                                         .fill(
-                                            LinearGradient(
-                                                colors: justTapped ? [Theme.success, Theme.success.opacity(0.8)] : [Theme.primary, Theme.primaryDark],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
+                                            RadialGradient(
+                                                colors: [
+                                                    Theme.primary.opacity(0.95),
+                                                    Theme.primary
+                                                ],
+                                                center: .center,
+                                                startRadius: 20,
+                                                endRadius: 75
                                             )
                                         )
-                                        .frame(width: 180, height: 180)
+                                        .frame(width: 150, height: 150)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                                .blur(radius: 3)
+                                                .offset(x: 0, y: 1)
+                                        )
 
-                                    VStack(spacing: 6) {
-                                        Image(systemName: justTapped ? "checkmark.circle.fill" : "hand.tap.fill")
-                                            .font(.system(size: 44))
-                                            .foregroundColor(.white)
-
-                                        Text(justTapped ? "Logged!" : "Tap")
-                                            .font(.system(size: 28, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
+                                    // Icon - pregnant person
+                                    Image("footprints")
+                                        .resizable()
+                                        .renderingMode(.template)
+                                        .foregroundColor(.white.opacity(0.95))
+                                        .frame(width: 60, height: 60)
                                 }
-                                .scaleEffect(justTapped ? 1.05 : 1.0)
-                                .shadow(color: Theme.primary.opacity(0.3), radius: 20, x: 0, y: 10)
+                                .scaleEffect(justTapped ? 0.92 : 1.0)
+                                .animation(.spring(response: 0.4, dampingFraction: 0.6), value: justTapped)
+                                .shadow(color: Theme.primary.opacity(0.15), radius: 12, x: 0, y: 6)
 
-                                Text("Tap when baby kicks")
-                                    .font(.system(size: 15))
+                                // Human, emotional text
+                                Text("I felt a kick")
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(Theme.textSecondary)
+
+                                // Feedback text that fades in/out
+                                if showFeedback {
+                                    Text("Kick recorded 💗")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(Theme.success)
+                                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                                }
                             }
                         }
                         .buttonStyle(.plain)
-                        .padding(.vertical, 20)
+                        .padding(.vertical, 30)
 
                         // Stats
                         HStack(spacing: 12) {
@@ -173,6 +202,9 @@ struct HomeView: View {
             }
             .navigationTitle("Kick Tracker")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color.white, for: .navigationBar)
             .alert("Baby's Name", isPresented: $showingNameAlert) {
                 TextField("Enter name", text: $nameInput)
                     .textInputAutocapitalization(.words)
@@ -200,19 +232,37 @@ struct HomeView: View {
         )
         storage.saveKick(kick)
 
-        // Visual feedback
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+        // Gentle haptic - light and subtle, not jarring
+        let impact = UIImpactFeedbackGenerator(style: .light)
+        impact.impactOccurred()
+
+        // Breathing animation - scale in
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.65)) {
             justTapped = true
         }
 
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
+        // Ripple effect
+        withAnimation(.easeOut(duration: 1.2)) {
+            rippleScale = 2.0
+        }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            withAnimation {
+        // Show feedback text
+        withAnimation(.easeIn(duration: 0.2)) {
+            showFeedback = true
+        }
+
+        // Reset everything gently
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 justTapped = false
             }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showFeedback = false
+            }
+            rippleScale = 0
         }
     }
 }

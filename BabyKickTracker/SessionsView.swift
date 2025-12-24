@@ -7,7 +7,7 @@ struct SessionsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Theme.background.ignoresSafeArea()
+                Theme.background.ignoresSafeArea(edges: .bottom)
 
                 ScrollView {
                     VStack(spacing: 24) {
