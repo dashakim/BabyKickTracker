@@ -24,7 +24,7 @@ struct HistoryView: View {
                     .pickerStyle(.segmented)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
-                    .background(Color.white)
+                    .background(.thinMaterial)
 
                     // Content
                     ScrollView {

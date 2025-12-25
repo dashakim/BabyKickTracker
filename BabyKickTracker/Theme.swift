@@ -19,9 +19,9 @@ struct Theme {
     static let accent = Color(red: 1.0, green: 0.85, blue: 0.78) // #FFD9C7 - Soft peach
     static let accentLight = Color(red: 1.0, green: 0.95, blue: 0.93) // #FFF2ED - Very light peach
 
-    // Backgrounds - adaptive for dark mode
+    // Backgrounds - adaptive for dark mode with glass effect
     static let background = Color(light: Color(red: 0.99, green: 0.98, blue: 0.99), dark: Color(red: 0.12, green: 0.11, blue: 0.13))
-    static let cardBackground = Color(light: .white, dark: Color(red: 0.18, green: 0.17, blue: 0.19))
+    // Note: cardBackground is now replaced by Materials in the CardModifier
 
     // Text - adaptive for dark mode
     static let textPrimary = Color(light: Color(red: 0.20, green: 0.18, blue: 0.22), dark: Color(red: 0.95, green: 0.94, blue: 0.96))
@@ -48,11 +48,11 @@ extension Color {
     }
 }
 
-// Modern card style
+// Modern card style with frosted glass effect
 struct CardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(Theme.cardBackground)
+            .background(.ultraThinMaterial)
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
             .shadow(color: Color.black.opacity(0.02), radius: 2, x: 0, y: 1)

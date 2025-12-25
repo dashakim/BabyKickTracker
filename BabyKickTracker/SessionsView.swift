@@ -104,7 +104,7 @@ struct SessionsView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 16)
-                                        .background(Theme.cardBackground)
+                                        .background(.thinMaterial)
                                         .cornerRadius(12)
 
                                         VStack(spacing: 4) {
@@ -117,7 +117,7 @@ struct SessionsView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 16)
-                                        .background(Theme.cardBackground)
+                                        .background(.thinMaterial)
                                         .cornerRadius(12)
                                     }
                                 }

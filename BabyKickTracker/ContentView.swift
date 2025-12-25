@@ -2,17 +2,15 @@ import SwiftUI
 
 struct ContentView: View {
     init() {
-        // Customize tab bar appearance for dark mode
+        // Customize tab bar with frosted glass effect
         let tabAppearance = UITabBarAppearance()
-        tabAppearance.configureWithOpaqueBackground()
-        tabAppearance.backgroundColor = UIColor(light: .white, dark: UIColor(red: 0.18, green: 0.17, blue: 0.19, alpha: 1.0))
+        tabAppearance.configureWithDefaultBackground()
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
 
-        // Customize navigation bar appearance for better title visibility
+        // Customize navigation bar with frosted glass effect
         let navAppearance = UINavigationBarAppearance()
-        navAppearance.configureWithOpaqueBackground()
-        navAppearance.backgroundColor = UIColor(light: .white, dark: UIColor(red: 0.12, green: 0.11, blue: 0.13, alpha: 1.0))
+        navAppearance.configureWithDefaultBackground()
         navAppearance.largeTitleTextAttributes = [
             .foregroundColor: UIColor(light: UIColor(red: 0.20, green: 0.18, blue: 0.22, alpha: 1.0), dark: UIColor(red: 1.0, green: 0.71, blue: 0.82, alpha: 1.0)),
             .font: UIFont.systemFont(ofSize: 34, weight: .bold)
