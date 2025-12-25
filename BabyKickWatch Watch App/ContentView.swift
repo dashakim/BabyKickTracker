@@ -90,6 +90,10 @@ struct ContentView: View {
         .onAppear {
             kickManager.loadData()
         }
+        .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationWillEnterForegroundNotification)) { _ in
+            // Reload data when Watch app comes to foreground
+            kickManager.loadData()
+        }
     }
 
     private func logKick() {

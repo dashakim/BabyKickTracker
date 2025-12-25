@@ -222,6 +222,11 @@ struct HomeView: View {
             }
             .onAppear {
                 nameInput = storage.babyName
+                storage.loadData() // Reload data when view appears
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Reload data when app comes to foreground
+                storage.loadData()
             }
             .sheet(isPresented: $showingStatistics) {
                 StatisticsView()

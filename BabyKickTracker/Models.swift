@@ -5,8 +5,8 @@ struct Kick: Identifiable, Codable {
     let timestamp: Date
     let sessionId: String?
 
-    init(timestamp: Date = Date(), sessionId: String? = nil) {
-        self.id = UUID().uuidString
+    init(id: String = UUID().uuidString, timestamp: Date = Date(), sessionId: String? = nil) {
+        self.id = id
         self.timestamp = timestamp
         self.sessionId = sessionId
     }
