@@ -48,6 +48,14 @@ class KickManager: NSObject, ObservableObject {
         verifyAppGroupSetup()
         loadData() // Load data immediately on initialization
         
+        // Request sync after a short delay to ensure Watch Connectivity is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            if WCSession.default.activationState == .activated {
+                print("⌚ Requesting initial sync from iPhone")
+                self.requestFullSyncFromiPhone()
+            }
+        }
+        
         // Observe shared storage changes
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -55,6 +63,7 @@ class KickManager: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] _ in
             // Reload data when shared storage changes
+            print("⌚ UserDefaults changed - reloading data")
             self?.loadData()
         }
     }
@@ -86,29 +95,86 @@ class KickManager: NSObject, ObservableObject {
 
     func loadData() {
         // Always read fresh from shared storage (don't use cached data)
-        // Get a fresh reference to shared defaults to ensure we read latest data
+        // Get a NEW reference each time to avoid caching issues
         guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
             print("⚠️ WATCH: Cannot access shared storage, using local")
             return
         }
         
-        // Load today's kick count
-        let kicks: [Kick]
-        if let data = sharedDefaults.data(forKey: kicksKey),
-           let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
-            kicks = decoded
-            print("⌚ Loaded \(kicks.count) total kicks from shared storage (group: \(appGroupIdentifier))")
-        } else {
-            kicks = []
-            print("⌚ No kicks data found in shared storage")
+        // Force synchronization - this helps with App Groups propagation delays
+        // Note: synchronize() is deprecated but can help with App Groups timing
+        sharedDefaults.synchronize()
+        
+        // Try reading multiple times to ensure we get latest data
+        var kicks: [Kick] = []
+        var lastCount = 0
+        
+        // Read up to 3 times to catch any propagation delays
+        for attempt in 1...3 {
+            if let data = sharedDefaults.data(forKey: kicksKey),
+               let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+                kicks = decoded
+                if kicks.count != lastCount {
+                    print("⌚ Loaded \(kicks.count) total kicks from shared storage (attempt \(attempt))")
+                    lastCount = kicks.count
+                    // If count changed, try once more to see if there's more data
+                    if attempt < 3 {
+                        sharedDefaults.synchronize()
+                        continue
+                    }
+                } else {
+                    // Count is stable, we have the latest
+                    break
+                }
+            } else {
+                if attempt == 1 {
+                    print("⌚ No kicks data found in shared storage")
+                }
+                break
+            }
         }
         
-        let today = Calendar.current.startOfDay(for: Date())
-        todayKickCount = kicks.filter { kick in
-            Calendar.current.startOfDay(for: kick.timestamp) == today
-        }.count
+        if kicks.isEmpty {
+            kicks = []
+        }
+        
+        // Use calendar with explicit timezone to ensure consistent date comparison
+        let calendar = Calendar.current
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
+        
+        let todayKicks = kicks.filter { kick in
+            let kickDay = calendar.startOfDay(for: kick.timestamp)
+            return calendar.isDate(kickDay, inSameDayAs: today)
+        }
+        todayKickCount = todayKicks.count
 
-        print("⌚ Today's count: \(todayKickCount) kicks")
+        // Debug logging - only log when count changes or on initial load
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .full
+        formatter.timeZone = calendar.timeZone
+        
+        print("⌚ WATCH: Loaded \(kicks.count) total kicks, \(todayKickCount) today")
+        print("⌚ WATCH: Current time: \(formatter.string(from: now))")
+        print("⌚ WATCH: Today starts at: \(formatter.string(from: today))")
+        print("⌚ WATCH: Timezone: \(calendar.timeZone.identifier)")
+        if todayKickCount > 0, let first = todayKicks.first, let last = todayKicks.last {
+            print("⌚ WATCH: First today kick: \(formatter.string(from: first.timestamp))")
+            print("⌚ WATCH: Last today kick: \(formatter.string(from: last.timestamp))")
+        }
+        
+        // If Watch Connectivity is active, request sync to ensure we have latest data
+        // This helps catch up if we're reading stale data from App Groups
+        if WCSession.default.activationState == .activated && WCSession.default.isReachable {
+            // Request sync in background (don't block)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if self.todayKickCount < 50 { // If count seems low, request sync
+                    print("⌚ Count seems low, requesting sync from iPhone")
+                    self.requestFullSyncFromiPhone()
+                }
+            }
+        }
 
         if let sessionData = sharedDefaults.data(forKey: "activeSession"),
            let session = try? JSONDecoder().decode(ActiveSession.self, from: sessionData) {
@@ -125,22 +191,36 @@ class KickManager: NSObject, ObservableObject {
             sessionId: activeSession?.id
         )
 
-        // Save to shared container (auto-synced with iPhone via App Groups)
-        var kicks = loadKicks()
+        // Always read fresh from shared storage first to ensure we have latest data
+        guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            print("⚠️ ⌚: Cannot access shared storage for save")
+            return
+        }
+        
+        var allKicks: [Kick] = []
+        if let data = sharedDefaults.data(forKey: kicksKey),
+           let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+            allKicks = decoded
+        }
         
         // Check if kick already exists (avoid duplicates)
-        if !kicks.contains(where: { $0.id == kick.id }) {
-            kicks.append(kick)
-            saveKicks(kicks)
+        if !allKicks.contains(where: { $0.id == kick.id }) {
+            allKicks.append(kick)
+            saveKicks(allKicks)
             
             // Update today's count
-            let today = Calendar.current.startOfDay(for: Date())
-            todayKickCount = kicks.filter { kick in
-                Calendar.current.startOfDay(for: kick.timestamp) == today
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            todayKickCount = allKicks.filter { kick in
+                let kickDay = calendar.startOfDay(for: kick.timestamp)
+                return calendar.isDate(kickDay, inSameDayAs: today)
             }.count
 
             // Send to iPhone for real-time update
             sendKickToPhone(kick)
+        } else {
+            print("⌚ Kick already exists, reloading data")
+            loadData()
         }
     }
 
@@ -215,6 +295,53 @@ extension KickManager: WCSessionDelegate {
             print("WCSession activation failed: \(error.localizedDescription)")
         } else {
             print("WCSession activated with state: \(activationState.rawValue)")
+            
+            // When Watch Connectivity activates, request full sync from iPhone
+            // This ensures we have all the latest data
+            if activationState == .activated && session.isReachable {
+                print("⌚ Requesting full sync from iPhone")
+                requestFullSyncFromiPhone()
+            } else {
+                // If not reachable, just reload from shared storage
+                DispatchQueue.main.async {
+                    self.loadData()
+                }
+            }
+        }
+    }
+    
+    private func requestFullSyncFromiPhone() {
+        guard WCSession.default.isReachable else {
+            print("⌚ iPhone not reachable, will sync from shared storage")
+            DispatchQueue.main.async {
+                self.loadData()
+            }
+            return
+        }
+        
+        // Request all kicks from iPhone
+        let request: [String: Any] = ["type": "requestSync"]
+        WCSession.default.sendMessage(request, replyHandler: { response in
+            if let kicksData = response["kicks"] as? Data,
+               let allKicks = try? JSONDecoder().decode([Kick].self, from: kicksData) {
+                print("⌚ Received \(allKicks.count) kicks from iPhone sync")
+                DispatchQueue.main.async {
+                    // Save all kicks to shared storage
+                    guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else { return }
+                    if let data = try? JSONEncoder().encode(allKicks) {
+                        sharedDefaults.set(data, forKey: self.kicksKey)
+                        print("⌚ Saved \(allKicks.count) kicks from iPhone sync")
+                    }
+                    // Reload to update count
+                    self.loadData()
+                }
+            }
+        }) { error in
+            print("⌚ Error requesting sync: \(error.localizedDescription)")
+            // Fallback to loading from shared storage
+            DispatchQueue.main.async {
+                self.loadData()
+            }
         }
     }
 
@@ -223,8 +350,25 @@ extension KickManager: WCSessionDelegate {
         if let type = message["type"] as? String {
             print("⌚ Received message from iPhone: \(type)")
             switch type {
+            case "fullSync":
+                // iPhone sent all kicks - replace our data with this
+                if let kicksData = message["kicks"] as? Data,
+                   let allKicks = try? JSONDecoder().decode([Kick].self, from: kicksData) {
+                    print("⌚ Received full sync from iPhone: \(allKicks.count) kicks")
+                    DispatchQueue.main.async {
+                        // Save all kicks to shared storage
+                        guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else { return }
+                        if let data = try? JSONEncoder().encode(allKicks) {
+                            sharedDefaults.set(data, forKey: self.kicksKey)
+                            print("⌚ Saved \(allKicks.count) kicks from iPhone full sync")
+                        }
+                        // Reload to update count
+                        self.loadData()
+                    }
+                }
             case "newKick":
-                // iPhone logged a kick - merge it with our data
+                // iPhone logged a kick - merge it directly from the message
+                // This avoids App Groups propagation delays
                 if let id = message["id"] as? String,
                    let timestampInterval = message["timestamp"] as? TimeInterval {
                     let sessionId = message["sessionId"] as? String
@@ -237,7 +381,11 @@ extension KickManager: WCSessionDelegate {
                     
                     DispatchQueue.main.async {
                         // Load current kicks from shared storage
-                        let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) ?? UserDefaults.standard
+                        guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else {
+                            print("⚠️ ⌚: Cannot access shared storage for merge")
+                            return
+                        }
+                        
                         var kicks: [Kick] = []
                         if let data = sharedDefaults.data(forKey: self.kicksKey),
                            let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
@@ -250,14 +398,28 @@ extension KickManager: WCSessionDelegate {
                             // Save back to shared storage
                             if let data = try? JSONEncoder().encode(kicks) {
                                 sharedDefaults.set(data, forKey: self.kicksKey)
-                                print("⌚ Merged kick from iPhone: \(id), total now: \(kicks.count)")
+                                print("⌚ Merged kick from iPhone message: \(id), total now: \(kicks.count)")
                             }
+                            
+                            // Update today's count immediately from the merged kicks
+                            let calendar = Calendar.current
+                            let today = calendar.startOfDay(for: Date())
+                            let newCount = kicks.filter { kick in
+                                let kickDay = calendar.startOfDay(for: kick.timestamp)
+                                return calendar.isDate(kickDay, inSameDayAs: today)
+                            }.count
+                            
+                            // Update count - we calculated it from the merged data, so it's correct
+                            self.todayKickCount = newCount
+                            print("⌚ Updated today's count: \(self.todayKickCount) kicks (from merged data)")
+                            
+                            // Don't call loadData() here - it would read stale data from App Groups
+                            // The count is already correct from the merged kicks
                         } else {
-                            print("⌚ Kick already exists, skipping")
+                            print("⌚ Kick already exists, reloading to sync")
+                            // Only reload if kick already exists (might be in shared storage)
+                            self.loadData()
                         }
-                        
-                        // Reload to update UI
-                        self.loadData()
                     }
                 }
             case "sessionUpdate":
@@ -296,7 +458,25 @@ extension KickManager: WCSessionDelegate {
         // Handle background updates from iPhone
         print("⌚ Received application context from iPhone")
         
-        // Handle kick from context
+        // Handle full sync from context
+        if let type = applicationContext["type"] as? String, type == "fullSync",
+           let kicksData = applicationContext["kicks"] as? Data,
+           let allKicks = try? JSONDecoder().decode([Kick].self, from: kicksData) {
+            print("⌚ Received full sync from iPhone context: \(allKicks.count) kicks")
+            DispatchQueue.main.async {
+                // Save all kicks to shared storage
+                guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else { return }
+                if let data = try? JSONEncoder().encode(allKicks) {
+                    sharedDefaults.set(data, forKey: self.kicksKey)
+                    print("⌚ Saved \(allKicks.count) kicks from iPhone full sync context")
+                }
+                // Reload to update count
+                self.loadData()
+            }
+            return
+        }
+        
+        // Handle kick from context - merge directly to avoid App Groups delays
         if let type = applicationContext["type"] as? String, type == "newKick",
            let id = applicationContext["id"] as? String,
            let timestampInterval = applicationContext["timestamp"] as? TimeInterval {
@@ -310,7 +490,11 @@ extension KickManager: WCSessionDelegate {
             
             DispatchQueue.main.async {
                 // Load current kicks from shared storage
-                let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) ?? UserDefaults.standard
+                guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else {
+                    print("⚠️ ⌚: Cannot access shared storage for context merge")
+                    return
+                }
+                
                 var kicks: [Kick] = []
                 if let data = sharedDefaults.data(forKey: self.kicksKey),
                    let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
@@ -325,14 +509,30 @@ extension KickManager: WCSessionDelegate {
                         sharedDefaults.set(data, forKey: self.kicksKey)
                         print("⌚ Merged kick from iPhone context: \(id), total now: \(kicks.count)")
                     }
+                    
+                    // Update today's count immediately from the merged kicks
+                    let calendar = Calendar.current
+                    let today = calendar.startOfDay(for: Date())
+                    let newCount = kicks.filter { kick in
+                        let kickDay = calendar.startOfDay(for: kick.timestamp)
+                        return calendar.isDate(kickDay, inSameDayAs: today)
+                    }.count
+                    
+                    // Update count - we calculated it from the merged data, so it's correct
+                    self.todayKickCount = newCount
+                    print("⌚ Updated today's count from context: \(self.todayKickCount) kicks (from merged data)")
+                    
+                    // Don't call loadData() here - it would read stale data from App Groups
+                    // The count is already correct from the merged kicks
+                } else {
+                    print("⌚ Kick already exists in context, reloading to sync")
+                    // Only reload if kick already exists (might be in shared storage)
+                    self.loadData()
                 }
-                
-                // Reload to update UI
-                self.loadData()
             }
         } else {
             // If no kick data, just reload from shared storage
-            DispatchQueue.main.async {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.loadData()
             }
         }

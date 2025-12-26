@@ -88,11 +88,24 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            // Always reload when view appears to ensure we have latest data
+            print("⌚ View appeared - reloading data from shared storage")
             kickManager.loadData()
+        }
+        .onChange(of: kickManager.todayKickCount) { oldValue, newValue in
+            // Debug: Log when count changes
+            if oldValue != newValue {
+                print("⌚ Today's count changed: \(oldValue) → \(newValue)")
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationWillEnterForegroundNotification)) { _ in
             // Reload data when Watch app comes to foreground
-            kickManager.loadData()
+            // This is especially important after midnight when day changes
+            print("⌚ Watch app entering foreground - reloading all data from shared storage")
+            // Small delay to ensure any pending writes are complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                kickManager.loadData()
+            }
         }
     }
 

@@ -45,6 +45,7 @@ class KickStorage: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] _ in
             // Reload data when app comes to foreground to get latest from shared storage
+            // This is especially important after midnight when day changes
             self?.loadData()
         }
         
@@ -54,6 +55,8 @@ class KickStorage: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] _ in
             // Reload data when app becomes active
+            // Force a full reload from shared storage to ensure sync after midnight
+            print("📱 App became active - reloading all data from shared storage")
             self?.loadData()
         }
     }
@@ -207,15 +210,30 @@ class KickStorage: NSObject, ObservableObject {
     }
 
     func saveKick(_ kick: Kick, syncToWatch: Bool = true) {
+        // Always read fresh from shared storage first to ensure we have latest data
+        guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            print("⚠️ 📱: Cannot access shared storage for save")
+            return
+        }
+        
+        var allKicks: [Kick] = []
+        if let data = sharedDefaults.data(forKey: kicksKey),
+           let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+            allKicks = decoded
+        }
+        
         // Check if kick already exists (avoid duplicates)
-        if !kicks.contains(where: { $0.id == kick.id }) {
-            kicks.append(kick)
-            if let encoded = try? JSONEncoder().encode(kicks) {
-                defaults.set(encoded, forKey: kicksKey)
-                // Note: synchronize() is deprecated and not needed for App Groups
-                // Writes to App Groups are immediate and shared across processes
-                print("📱 Saved \(kicks.count) kicks to shared storage")
+        if !allKicks.contains(where: { $0.id == kick.id }) {
+            allKicks.append(kick)
+            
+            // Save to shared storage
+            if let encoded = try? JSONEncoder().encode(allKicks) {
+                sharedDefaults.set(encoded, forKey: kicksKey)
+                print("📱 Saved \(allKicks.count) kicks to shared storage")
             }
+            
+            // Update in-memory array
+            kicks = allKicks
 
             // Add to active session if exists
             if let index = sessions.firstIndex(where: { $0.isActive && $0.id == kick.sessionId }) {
@@ -232,6 +250,8 @@ class KickStorage: NSObject, ObservableObject {
             }
         } else {
             print("📱 Kick already exists, skipping save")
+            // Still reload to ensure we have latest data
+            loadData()
         }
     }
 
@@ -261,10 +281,14 @@ class KickStorage: NSObject, ObservableObject {
     }
 
     var todayKicks: [Kick] {
-        let today = Calendar.current.startOfDay(for: Date())
-        return kicks.filter { kick in
-            Calendar.current.startOfDay(for: kick.timestamp) == today
+        // Use calendar with explicit comparison to ensure consistent date matching
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let filtered = kicks.filter { kick in
+            let kickDay = calendar.startOfDay(for: kick.timestamp)
+            return calendar.isDate(kickDay, inSameDayAs: today)
         }
+        return filtered
     }
 
     // MARK: - Watch Connectivity
@@ -356,6 +380,39 @@ extension KickStorage: WCSessionDelegate {
             print("WCSession activation failed: \(error.localizedDescription)")
         } else {
             print("iPhone WCSession activated: \(activationState.rawValue)")
+            
+            // When iPhone's Watch Connectivity activates, proactively send all kicks to Watch
+            // This ensures Watch has the latest data even if App Groups is stale
+            if activationState == .activated && session.isReachable {
+                print("📱 Watch is reachable - sending full sync")
+                sendFullSyncToWatch()
+            }
+        }
+    }
+    
+    private func sendFullSyncToWatch() {
+        guard WCSession.default.isReachable else {
+            print("📱 Watch not reachable, cannot send sync")
+            return
+        }
+        
+        // Send all kicks to Watch
+        if let data = try? JSONEncoder().encode(kicks) {
+            let syncData: [String: Any] = [
+                "type": "fullSync",
+                "kicks": data,
+                "totalCount": kicks.count
+            ]
+            
+            WCSession.default.sendMessage(syncData, replyHandler: { response in
+                print("📱 Watch confirmed full sync receipt")
+            }) { error in
+                print("📱 Error sending full sync: \(error.localizedDescription)")
+            }
+            
+            // Also update application context
+            try? WCSession.default.updateApplicationContext(syncData)
+            print("📱 Sent full sync to Watch: \(kicks.count) kicks")
         }
     }
 
@@ -375,6 +432,20 @@ extension KickStorage: WCSessionDelegate {
 
     func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
         print("📱 Received message from Watch (with reply)")
+        
+        // Handle sync request from Watch
+        if let type = message["type"] as? String, type == "requestSync" {
+            print("📱 Watch requested full sync - sending all kicks")
+            // Send all kicks to Watch
+            if let data = try? JSONEncoder().encode(kicks) {
+                replyHandler(["kicks": data, "status": "synced"])
+                print("📱 Sent \(kicks.count) kicks to Watch")
+            } else {
+                replyHandler(["status": "error"])
+            }
+            return
+        }
+        
         handleIncomingMessage(message)
         replyHandler(["status": "received"])
     }
@@ -398,16 +469,35 @@ extension KickStorage: WCSessionDelegate {
             
             // Update on main thread
             DispatchQueue.main.async {
-                // Check if kick already exists (avoid duplicates)
-                if !self.kicks.contains(where: { $0.id == kick.id }) {
-                    print("📱 Merging kick from Watch: \(id)")
-                    // Don't sync back to Watch - this kick came FROM Watch
-                    self.saveKick(kick, syncToWatch: false)
-                } else {
-                    print("📱 Kick already exists, skipping")
-                    // Still reload to ensure we have latest data
-                    self.loadData()
+                // Always read fresh from shared storage to ensure we have latest data
+                guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else {
+                    print("⚠️ 📱: Cannot access shared storage for merge")
+                    return
                 }
+                
+                var kicks: [Kick] = []
+                if let data = sharedDefaults.data(forKey: self.kicksKey),
+                   let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+                    kicks = decoded
+                }
+                
+                // Check if kick already exists (avoid duplicates)
+                if !kicks.contains(where: { $0.id == kick.id }) {
+                    kicks.append(kick)
+                    // Save back to shared storage
+                    if let data = try? JSONEncoder().encode(kicks) {
+                        sharedDefaults.set(data, forKey: self.kicksKey)
+                        print("📱 Merged kick from Watch: \(id), total now: \(kicks.count)")
+                    }
+                    // Update in-memory array and reload
+                    self.kicks = kicks
+                    self.objectWillChange.send()
+                } else {
+                    print("📱 Kick already exists, reloading from shared storage")
+                }
+                
+                // Always reload to ensure UI is in sync
+                self.loadData()
             }
         }
     }
@@ -430,15 +520,35 @@ extension KickStorage: WCSessionDelegate {
             )
             
             DispatchQueue.main.async {
+                // Always read fresh from shared storage to ensure we have latest data
+                guard let sharedDefaults = UserDefaults(suiteName: self.appGroupIdentifier) else {
+                    print("⚠️ 📱: Cannot access shared storage for context merge")
+                    return
+                }
+                
+                var kicks: [Kick] = []
+                if let data = sharedDefaults.data(forKey: self.kicksKey),
+                   let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+                    kicks = decoded
+                }
+                
                 // Check if kick already exists (avoid duplicates)
-                if !self.kicks.contains(where: { $0.id == kick.id }) {
-                    print("📱 Merging kick from Watch context: \(id)")
-                    // Don't sync back to Watch - this kick came FROM Watch
-                    self.saveKick(kick, syncToWatch: false)
+                if !kicks.contains(where: { $0.id == kick.id }) {
+                    kicks.append(kick)
+                    // Save back to shared storage
+                    if let data = try? JSONEncoder().encode(kicks) {
+                        sharedDefaults.set(data, forKey: self.kicksKey)
+                        print("📱 Merged kick from Watch context: \(id), total now: \(kicks.count)")
+                    }
+                    // Update in-memory array
+                    self.kicks = kicks
+                    self.objectWillChange.send()
                 } else {
                     print("📱 Kick already exists in context, reloading")
-                    self.loadData()
                 }
+                
+                // Always reload to ensure UI is in sync
+                self.loadData()
             }
         } else {
             // If no kick data, just reload from shared storage
