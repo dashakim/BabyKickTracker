@@ -10,6 +10,8 @@ class KickStorage: NSObject, ObservableObject {
     @Published var sessions: [MealSession] = []
     @Published var babyName: String = ""
 
+    private var midnightTimer: Timer?
+
     private let kicksKey = "baby_kicks"
     private let sessionsKey = "meal_sessions"
     private let babyNameKey = "baby_name"
@@ -37,7 +39,8 @@ class KickStorage: NSObject, ObservableObject {
         setupWatchConnectivity()
         loadData()
         verifyAppGroupSetup()
-        
+        setupMidnightTimer() // Schedule automatic reload at midnight
+
         // Observe app lifecycle to reload data when app becomes active
         NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
@@ -46,9 +49,10 @@ class KickStorage: NSObject, ObservableObject {
         ) { [weak self] _ in
             // Reload data when app comes to foreground to get latest from shared storage
             // This is especially important after midnight when day changes
+            print("📱 App entering foreground - reloading all data")
             self?.loadData()
         }
-        
+
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -59,6 +63,22 @@ class KickStorage: NSObject, ObservableObject {
             print("📱 App became active - reloading all data from shared storage")
             self?.loadData()
         }
+
+        // Add scene phase notification for iOS 13+
+        NotificationCenter.default.addObserver(
+            forName: UIScene.didActivateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("📱 Scene activated - reloading all data")
+            self?.loadData()
+        }
+    }
+
+    deinit {
+        midnightTimer?.invalidate()
+        midnightTimer = nil
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func migrateOldDataToAppGroups() {
@@ -172,6 +192,27 @@ class KickStorage: NSObject, ObservableObject {
             print("⚠️ WARNING: App Groups not configured! Using local storage only.")
             print("⚠️ Follow instructions in SYNC_SETUP.md to enable iPhone-Watch sync")
         }
+    }
+
+    private func setupMidnightTimer() {
+        let calendar = Calendar.current
+        let now = Date()
+
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else {
+            return
+        }
+
+        let secondsUntilMidnight = tomorrow.timeIntervalSince(now)
+
+        midnightTimer = Timer.scheduledTimer(withTimeInterval: secondsUntilMidnight, repeats: false) { [weak self] _ in
+            print("📱 MIDNIGHT DETECTED - Reloading data")
+            DispatchQueue.main.async {
+                self?.loadData()
+                self?.setupMidnightTimer() // Reschedule for next midnight
+            }
+        }
+
+        print("📱 Scheduled midnight reload in \(Int(secondsUntilMidnight)) seconds")
     }
 
     func loadData() {

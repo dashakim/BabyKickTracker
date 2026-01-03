@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var kickCount = 0
     @State private var rippleScale: CGFloat = 0
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
 
     var body: some View {
         ZStack {
@@ -89,8 +90,10 @@ struct ContentView: View {
         }
         .onAppear {
             // Always reload when view appears to ensure we have latest data
-            print("⌚ View appeared - reloading data from shared storage")
+            print("⌚ View appeared - reloading data and requesting sync")
             kickManager.loadData()
+            // Also request sync from iPhone to get any kicks logged while Watch was in background
+            kickManager.manualRefresh()
         }
         .onChange(of: kickManager.todayKickCount) { oldValue, newValue in
             // Debug: Log when count changes
@@ -99,12 +102,17 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationWillEnterForegroundNotification)) { _ in
-            // Reload data when Watch app comes to foreground
-            // This is especially important after midnight when day changes
-            print("⌚ Watch app entering foreground - reloading all data from shared storage")
-            // Small delay to ensure any pending writes are complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                kickManager.loadData()
+            print("⌚ Entering foreground - requesting sync")
+            kickManager.manualRefresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationDidBecomeActiveNotification)) { _ in
+            print("⌚ Became active - requesting sync")
+            kickManager.manualRefresh()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                print("⌚ Scene became active - requesting sync")
+                kickManager.manualRefresh()
             }
         }
     }

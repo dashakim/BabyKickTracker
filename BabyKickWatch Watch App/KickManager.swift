@@ -27,6 +27,8 @@ class KickManager: NSObject, ObservableObject {
     @Published var todayKickCount: Int = 0
     @Published var activeSession: ActiveSession?
 
+    private var midnightTimer: Timer?
+
     // IMPORTANT: Must match iPhone app's App Group identifier
     // Configure in Xcode: Target → Signing & Capabilities → App Groups
     private let appGroupIdentifier = "group.com.daria.BabyKickTracker"
@@ -47,16 +49,9 @@ class KickManager: NSObject, ObservableObject {
         setupWatchConnectivity()
         verifyAppGroupSetup()
         loadData() // Load data immediately on initialization
-        
-        // Request sync after a short delay to ensure Watch Connectivity is ready
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            if WCSession.default.activationState == .activated {
-                print("⌚ Requesting initial sync from iPhone")
-                self.requestFullSyncFromiPhone()
-            }
-        }
-        
-        // Observe shared storage changes
+        setupMidnightTimer() // Schedule automatic reload at midnight
+
+        // Observe shared storage changes for App Groups sync
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
@@ -66,6 +61,12 @@ class KickManager: NSObject, ObservableObject {
             print("⌚ UserDefaults changed - reloading data")
             self?.loadData()
         }
+    }
+
+    deinit {
+        midnightTimer?.invalidate()
+        midnightTimer = nil
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func verifyAppGroupSetup() {
@@ -93,94 +94,72 @@ class KickManager: NSObject, ObservableObject {
         }
     }
 
-    func loadData() {
-        // Always read fresh from shared storage (don't use cached data)
-        // Get a NEW reference each time to avoid caching issues
-        guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
-            print("⚠️ WATCH: Cannot access shared storage, using local")
+    private func setupMidnightTimer() {
+        let calendar = Calendar.current
+        let now = Date()
+
+        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else {
             return
         }
-        
-        // Force synchronization - this helps with App Groups propagation delays
-        // Note: synchronize() is deprecated but can help with App Groups timing
-        sharedDefaults.synchronize()
-        
-        // Try reading multiple times to ensure we get latest data
-        var kicks: [Kick] = []
-        var lastCount = 0
-        
-        // Read up to 3 times to catch any propagation delays
-        for attempt in 1...3 {
-            if let data = sharedDefaults.data(forKey: kicksKey),
-               let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
-                kicks = decoded
-                if kicks.count != lastCount {
-                    print("⌚ Loaded \(kicks.count) total kicks from shared storage (attempt \(attempt))")
-                    lastCount = kicks.count
-                    // If count changed, try once more to see if there's more data
-                    if attempt < 3 {
-                        sharedDefaults.synchronize()
-                        continue
-                    }
-                } else {
-                    // Count is stable, we have the latest
-                    break
-                }
-            } else {
-                if attempt == 1 {
-                    print("⌚ No kicks data found in shared storage")
-                }
-                break
+
+        let secondsUntilMidnight = tomorrow.timeIntervalSince(now)
+
+        midnightTimer = Timer.scheduledTimer(withTimeInterval: secondsUntilMidnight, repeats: false) { [weak self] _ in
+            print("⌚ MIDNIGHT DETECTED - Reloading data")
+            DispatchQueue.main.async {
+                self?.loadData()
+                self?.setupMidnightTimer() // Reschedule for next midnight
             }
         }
-        
-        if kicks.isEmpty {
-            kicks = []
+
+        print("⌚ Scheduled midnight reload in \(Int(secondsUntilMidnight)) seconds")
+    }
+
+    func loadData() {
+        // Always read fresh from shared storage
+        guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
+            print("⚠️ WATCH: Cannot access shared storage")
+            return
         }
-        
-        // Use calendar with explicit timezone to ensure consistent date comparison
+
+        // Force synchronization to ensure we get latest data from App Groups
+        sharedDefaults.synchronize()
+
+        // Read kicks from shared storage
+        var kicks: [Kick] = []
+        if let data = sharedDefaults.data(forKey: kicksKey),
+           let decoded = try? JSONDecoder().decode([Kick].self, from: data) {
+            kicks = decoded
+        }
+
+        // Calculate today's kicks
         let calendar = Calendar.current
         let now = Date()
         let today = calendar.startOfDay(for: now)
-        
+
         let todayKicks = kicks.filter { kick in
             let kickDay = calendar.startOfDay(for: kick.timestamp)
             return calendar.isDate(kickDay, inSameDayAs: today)
         }
         todayKickCount = todayKicks.count
 
-        // Debug logging - only log when count changes or on initial load
-        let formatter = DateFormatter()
-        formatter.dateStyle = .full
-        formatter.timeStyle = .full
-        formatter.timeZone = calendar.timeZone
-        
-        print("⌚ WATCH: Loaded \(kicks.count) total kicks, \(todayKickCount) today")
-        print("⌚ WATCH: Current time: \(formatter.string(from: now))")
-        print("⌚ WATCH: Today starts at: \(formatter.string(from: today))")
-        print("⌚ WATCH: Timezone: \(calendar.timeZone.identifier)")
-        if todayKickCount > 0, let first = todayKicks.first, let last = todayKicks.last {
-            print("⌚ WATCH: First today kick: \(formatter.string(from: first.timestamp))")
-            print("⌚ WATCH: Last today kick: \(formatter.string(from: last.timestamp))")
-        }
-        
-        // If Watch Connectivity is active, request sync to ensure we have latest data
-        // This helps catch up if we're reading stale data from App Groups
-        if WCSession.default.activationState == .activated && WCSession.default.isReachable {
-            // Request sync in background (don't block)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                if self.todayKickCount < 50 { // If count seems low, request sync
-                    print("⌚ Count seems low, requesting sync from iPhone")
-                    self.requestFullSyncFromiPhone()
-                }
-            }
-        }
+        print("⌚ Loaded \(kicks.count) total, \(todayKickCount) today")
 
+        // Load active session if exists
         if let sessionData = sharedDefaults.data(forKey: "activeSession"),
            let session = try? JSONDecoder().decode(ActiveSession.self, from: sessionData) {
             if session.endTime > Date() {
                 activeSession = session
                 print("⌚ Active session found: \(session.kickCount) kicks")
+            }
+        }
+
+        // If Watch Connectivity is active, request sync to ensure we have latest data
+        // Always request sync when iPhone is reachable (don't rely on count threshold)
+        if WCSession.default.activationState == .activated && WCSession.default.isReachable {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                print("⌚ Requesting sync from iPhone to ensure latest data")
+                self.requestFullSyncFromiPhone()
             }
         }
     }
@@ -221,6 +200,15 @@ class KickManager: NSObject, ObservableObject {
         } else {
             print("⌚ Kick already exists, reloading data")
             loadData()
+        }
+    }
+
+    func manualRefresh() {
+        print("⌚ Manual refresh triggered")
+        loadData()
+
+        if WCSession.default.activationState == .activated && WCSession.default.isReachable {
+            requestFullSyncFromiPhone()
         }
     }
 
@@ -411,8 +399,9 @@ extension KickManager: WCSessionDelegate {
                             
                             // Update count - we calculated it from the merged data, so it's correct
                             self.todayKickCount = newCount
-                            print("⌚ Updated today's count: \(self.todayKickCount) kicks (from merged data)")
-                            
+                            self.objectWillChange.send()
+                            print("⌚ UI update triggered - count: \(self.todayKickCount)")
+
                             // Don't call loadData() here - it would read stale data from App Groups
                             // The count is already correct from the merged kicks
                         } else {
@@ -472,6 +461,7 @@ extension KickManager: WCSessionDelegate {
                 }
                 // Reload to update count
                 self.loadData()
+                self.objectWillChange.send()
             }
             return
         }
@@ -520,8 +510,9 @@ extension KickManager: WCSessionDelegate {
                     
                     // Update count - we calculated it from the merged data, so it's correct
                     self.todayKickCount = newCount
-                    print("⌚ Updated today's count from context: \(self.todayKickCount) kicks (from merged data)")
-                    
+                    self.objectWillChange.send()
+                    print("⌚ UI update triggered from context - count: \(self.todayKickCount)")
+
                     // Don't call loadData() here - it would read stale data from App Groups
                     // The count is already correct from the merged kicks
                 } else {
