@@ -28,6 +28,7 @@ class KickManager: NSObject, ObservableObject {
     @Published var activeSession: ActiveSession?
 
     private var midnightTimer: Timer?
+    private var lastKickLoggedAt: Date?
 
     // IMPORTANT: Must match iPhone app's App Group identifier
     // Configure in Xcode: Target → Signing & Capabilities → App Groups
@@ -116,6 +117,12 @@ class KickManager: NSObject, ObservableObject {
     }
 
     func loadData() {
+        // Skip reload if we just logged a kick (prevent blinking)
+        if let lastLogged = lastKickLoggedAt, Date().timeIntervalSince(lastLogged) < 2.0 {
+            print("⌚ Skipping reload - just logged a kick")
+            return
+        }
+
         // Always read fresh from shared storage
         guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else {
             print("⚠️ WATCH: Cannot access shared storage")
@@ -195,6 +202,9 @@ class KickManager: NSObject, ObservableObject {
                 return calendar.isDate(kickDay, inSameDayAs: today)
             }.count
 
+            // Mark that we just logged a kick to prevent immediate reload
+            lastKickLoggedAt = Date()
+
             // Send to iPhone for real-time update
             sendKickToPhone(kick)
         } else {
@@ -262,15 +272,26 @@ class KickManager: NSObject, ObservableObject {
                 print("❌ Error sending kick to iPhone: \(error.localizedDescription)")
             }
         } else {
-            print("⚠️ Phone not reachable, using background context")
+            print("⚠️ Phone not reachable, will sync all kicks via background context")
         }
 
-        // Always update application context for background sync
-        do {
-            try WCSession.default.updateApplicationContext(kickData)
-            print("✅ Updated application context for background sync")
-        } catch {
-            print("❌ Failed to update context: \(error.localizedDescription)")
+        // Always update application context with FULL kicks array for reliable background sync
+        // This ensures that if watch logs multiple kicks while out of range, all are synced
+        guard let sharedDefaults = UserDefaults(suiteName: appGroupIdentifier) else { return }
+        if let allKicksData = sharedDefaults.data(forKey: kicksKey),
+           let allKicks = try? JSONDecoder().decode([Kick].self, from: allKicksData),
+           let kicksData = try? JSONEncoder().encode(allKicks) {
+            do {
+                let fullSyncData: [String: Any] = [
+                    "type": "fullSync",
+                    "kicks": kicksData,
+                    "totalCount": allKicks.count
+                ]
+                try WCSession.default.updateApplicationContext(fullSyncData)
+                print("✅ Updated application context with \(allKicks.count) total kicks")
+            } catch {
+                print("❌ Failed to update context: \(error.localizedDescription)")
+            }
         }
     }
 }

@@ -627,6 +627,7 @@
 				DEVELOPMENT_TEAM = JH7SG9697W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Baby Kick";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -662,6 +663,7 @@
 				DEVELOPMENT_TEAM = JH7SG9697W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Baby Kick";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -781,7 +783,7 @@
 				DEVELOPMENT_TEAM = JH7SG9697W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = BabyKickWatch;
+				INFOPLIST_KEY_CFBundleDisplayName = "Baby Kick";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.daria.BabyKickTracker;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -817,7 +819,7 @@
 				DEVELOPMENT_TEAM = JH7SG9697W;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = BabyKickWatch;
+				INFOPLIST_KEY_CFBundleDisplayName = "Baby Kick";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.daria.BabyKickTracker;
 				LD_RUNPATH_SEARCH_PATHS = (
