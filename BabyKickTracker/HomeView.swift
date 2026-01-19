@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var storage = KickStorage.shared
+    @StateObject private var cloudKitManager = CloudKitManager.shared
     @State private var justTapped = false
     @State private var showingNameAlert = false
     @State private var nameInput = ""
@@ -206,6 +207,11 @@ struct HomeView: View {
             }
             .navigationTitle("Kick Tracker")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    syncStatusView
+                }
+            }
             .alert("Baby's Name", isPresented: $showingNameAlert) {
                 TextField("Enter name", text: $nameInput)
                     .textInputAutocapitalization(.words)
@@ -272,6 +278,27 @@ struct HomeView: View {
                 showFeedback = false
             }
             rippleScale = 0
+        }
+    }
+
+    // Sync status indicator
+    private var syncStatusView: some View {
+        HStack(spacing: 4) {
+            switch cloudKitManager.syncState {
+            case .idle:
+                if cloudKitManager.isOnline {
+                    Image(systemName: "icloud.fill")
+                        .foregroundColor(Theme.success)
+                        .font(.system(size: 16))
+                }
+            case .syncing:
+                ProgressView()
+                    .scaleEffect(0.7)
+            case .error(let message):
+                Image(systemName: "exclamationmark.icloud.fill")
+                    .foregroundColor(Theme.primaryDark)
+                    .font(.system(size: 16))
+            }
         }
     }
 }

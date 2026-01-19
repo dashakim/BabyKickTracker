@@ -41,6 +41,17 @@ class KickStorage: NSObject, ObservableObject {
         verifyAppGroupSetup()
         setupMidnightTimer() // Schedule automatic reload at midnight
 
+        // Migrate to CloudKit in background
+        Task {
+            do {
+                try await CloudKitMigrator.shared.migrateToCloudKitIfNeeded()
+                print("☁️ CloudKit migration check complete")
+            } catch {
+                print("☁️ CloudKit migration failed: \(error.localizedDescription)")
+                // Continue with local storage - app works offline
+            }
+        }
+
         // Observe app lifecycle to reload data when app becomes active
         NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
@@ -248,6 +259,15 @@ class KickStorage: NSObject, ObservableObject {
     func saveBabyName(_ name: String) {
         babyName = name
         defaults.set(name, forKey: babyNameKey)
+
+        // Save to CloudKit in background
+        Task {
+            do {
+                try await CloudKitManager.shared.saveBabyName(name)
+            } catch {
+                print("☁️ Failed to save baby name to CloudKit: \(error.localizedDescription)")
+            }
+        }
     }
 
     func saveKick(_ kick: Kick, syncToWatch: Bool = true) {
@@ -284,6 +304,16 @@ class KickStorage: NSObject, ObservableObject {
 
             // Notify objectWillChange for UI updates
             objectWillChange.send()
+
+            // Save to CloudKit in background
+            Task {
+                do {
+                    try await CloudKitManager.shared.saveKick(kick)
+                } catch {
+                    print("☁️ Failed to save kick to CloudKit: \(error.localizedDescription)")
+                    // Continue - local storage is primary
+                }
+            }
 
             // Sync to Watch (only if this kick originated on iPhone)
             if syncToWatch {
