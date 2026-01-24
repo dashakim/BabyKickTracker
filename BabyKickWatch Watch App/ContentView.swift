@@ -1,5 +1,7 @@
 import SwiftUI
-import WatchConnectivity
+import os.log
+
+private let logger = Logger(subsystem: "com.daria.BabyKickTracker.watchkitapp", category: "ContentView")
 
 struct ContentView: View {
     @StateObject private var kickManager = KickManager.shared
@@ -7,7 +9,6 @@ struct ContentView: View {
     @State private var kickCount = 0
     @State private var rippleScale: CGFloat = 0
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.scenePhase) var scenePhase
 
     var body: some View {
         ZStack {
@@ -76,48 +77,66 @@ struct ContentView: View {
 
             Spacer()
 
-            // Today's count
+            // Today's count with sync indicator
             VStack(spacing: 2) {
-                Text("\(kickManager.todayKickCount)")
-                    .font(.title3)
-                    .fontWeight(.semibold)
+                HStack(spacing: 6) {
+                    Text("\(kickManager.todayKickCount)")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+
+                    if kickManager.isSyncing {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(width: 16, height: 16)
+                    }
+                }
                 Text("today")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+
+                // Debug: show sync status
+                Text(kickManager.lastSyncStatus)
+                    .font(.system(size: 8))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
             }
             .padding(.bottom, 8)
             }
+
+            // Blocking overlay during initial data load
+            if kickManager.isLoadingInitialData {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.2)
+                    Text("Syncing...")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
         }
         .onAppear {
-            // Always reload when view appears to ensure we have latest data
-            print("⌚ View appeared - reloading data and requesting sync")
+            // Only ensure local data is loaded - sync handled by App-level scenePhase
+            #if DEBUG
+            logger.debug("View appeared - loading local data")
+            #endif
             kickManager.loadData()
-            // Also request sync from iPhone to get any kicks logged while Watch was in background
-            kickManager.manualRefresh()
         }
         .onChange(of: kickManager.todayKickCount) { oldValue, newValue in
             // Debug: Log when count changes
+            #if DEBUG
             if oldValue != newValue {
-                print("⌚ Today's count changed: \(oldValue) → \(newValue)")
+                logger.debug("Today's count changed: \(oldValue) → \(newValue)")
             }
+            #endif
         }
-        .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationWillEnterForegroundNotification)) { _ in
-            print("⌚ Entering foreground - requesting sync")
-            kickManager.manualRefresh()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: WKExtension.applicationDidBecomeActiveNotification)) { _ in
-            print("⌚ Became active - requesting sync")
-            kickManager.manualRefresh()
-        }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                print("⌚ Scene became active - requesting sync")
-                kickManager.manualRefresh()
-            }
-        }
+        // Note: Scene phase handling moved to App level for more reliable wrist-raise detection
     }
 
     private func logKick() {
+        // Always allow kick logging - never block user taps
         kickManager.logKick()
 
         // Visual feedback

@@ -216,8 +216,12 @@ struct HomeView: View {
                 TextField("Enter name", text: $nameInput)
                     .textInputAutocapitalization(.words)
                 Button("Save") {
-                    if !nameInput.isEmpty {
-                        storage.saveBabyName(nameInput)
+                    // Validate and sanitize input
+                    let sanitizedName = nameInput
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .prefix(50) // Limit to 50 characters
+                    if !sanitizedName.isEmpty {
+                        storage.saveBabyName(String(sanitizedName))
                     }
                 }
                 Button("Cancel", role: .cancel) {
@@ -294,7 +298,7 @@ struct HomeView: View {
             case .syncing:
                 ProgressView()
                     .scaleEffect(0.7)
-            case .error(let message):
+            case .error:
                 Image(systemName: "exclamationmark.icloud.fill")
                     .foregroundColor(Theme.primaryDark)
                     .font(.system(size: 16))

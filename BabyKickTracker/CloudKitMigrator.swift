@@ -1,5 +1,8 @@
 import Foundation
 import CloudKit
+import os.log
+
+private let logger = Logger(subsystem: "com.daria.BabyKickTracker", category: "CloudKitMigrator")
 
 class CloudKitMigrator {
     static let shared = CloudKitMigrator()
@@ -11,21 +14,29 @@ class CloudKitMigrator {
 
     func migrateToCloudKitIfNeeded() async throws {
         guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
-            print("☁️ Cannot access App Groups for migration")
+            #if DEBUG
+            logger.warning("Cannot access App Groups for migration")
+            #endif
             return
         }
 
         // Check if already migrated
         guard !defaults.bool(forKey: migrationKey) else {
-            print("☁️ Already migrated to CloudKit")
+            #if DEBUG
+            logger.debug("Already migrated to CloudKit")
+            #endif
             return
         }
 
-        print("☁️ Starting CloudKit migration...")
+        #if DEBUG
+        logger.debug("Starting CloudKit migration...")
+        #endif
 
         // Check if user is signed in to iCloud
         guard CloudKitManager.shared.isOnline else {
-            print("⚠️ Cannot migrate - not signed in to iCloud")
+            #if DEBUG
+            logger.warning("Cannot migrate - not signed in to iCloud")
+            #endif
             return
         }
 
@@ -34,7 +45,9 @@ class CloudKitMigrator {
         let sessions = loadSessionsFromAppGroups(defaults)
         let babyName = defaults.string(forKey: "baby_name") ?? ""
 
-        print("☁️ Found \(kicks.count) kicks, \(sessions.count) sessions to migrate")
+        #if DEBUG
+        logger.debug("Found \(kicks.count) kicks, \(sessions.count) sessions to migrate")
+        #endif
 
         // Upload to CloudKit
         if !kicks.isEmpty {
@@ -53,7 +66,9 @@ class CloudKitMigrator {
 
         // Mark migration as complete
         defaults.set(true, forKey: migrationKey)
-        print("☁️ Migration complete!")
+        #if DEBUG
+        logger.debug("Migration complete!")
+        #endif
     }
 
     private func loadKicksFromAppGroups(_ defaults: UserDefaults) -> [Kick] {
@@ -72,10 +87,12 @@ class CloudKitMigrator {
         return sessions
     }
 
-    // Reset migration (for testing purposes)
+    #if DEBUG
+    // Reset migration (for testing purposes only - not available in production)
     func resetMigration() {
         guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else { return }
         defaults.removeObject(forKey: migrationKey)
-        print("☁️ Migration reset")
+        logger.debug("Migration reset")
     }
+    #endif
 }

@@ -1,6 +1,9 @@
 import Foundation
 import CloudKit
 import Combine
+import os.log
+
+private let logger = Logger(subsystem: "com.daria.BabyKickTracker", category: "CloudKit")
 
 class CloudKitManager: ObservableObject {
     static let shared = CloudKitManager()
@@ -33,24 +36,36 @@ class CloudKitManager: ObservableObject {
             DispatchQueue.main.async {
                 switch status {
                 case .available:
-                    print("☁️ iCloud account available")
+                    #if DEBUG
+                    logger.debug("iCloud account available")
+                    #endif
                     self.isOnline = true
                 case .noAccount:
-                    print("⚠️ No iCloud account")
+                    #if DEBUG
+                    logger.warning("No iCloud account")
+                    #endif
                     self.syncState = .error("Please sign in to iCloud")
                     self.isOnline = false
                 case .restricted:
-                    print("⚠️ iCloud account restricted")
+                    #if DEBUG
+                    logger.warning("iCloud account restricted")
+                    #endif
                     self.syncState = .error("iCloud access is restricted")
                     self.isOnline = false
                 case .couldNotDetermine:
-                    print("⚠️ Could not determine iCloud status")
+                    #if DEBUG
+                    logger.warning("Could not determine iCloud status")
+                    #endif
                     self.isOnline = false
                 case .temporarilyUnavailable:
-                    print("⚠️ iCloud temporarily unavailable")
+                    #if DEBUG
+                    logger.warning("iCloud temporarily unavailable")
+                    #endif
                     self.isOnline = false
                 @unknown default:
-                    print("⚠️ Unknown iCloud status")
+                    #if DEBUG
+                    logger.warning("Unknown iCloud status")
+                    #endif
                     self.isOnline = false
                 }
             }
@@ -61,7 +76,9 @@ class CloudKitManager: ObservableObject {
 
     func saveKick(_ kick: Kick) async throws {
         guard isOnline else {
-            print("☁️ Offline - kick will sync later")
+            #if DEBUG
+            logger.debug("Offline - kick will sync later")
+            #endif
             return
         }
 
@@ -74,16 +91,22 @@ class CloudKitManager: ObservableObject {
 
         do {
             _ = try await privateDB.save(record)
-            print("☁️ Kick saved to CloudKit: \(kick.id)")
+            #if DEBUG
+            logger.debug("Kick saved to CloudKit")
+            #endif
         } catch {
-            print("❌ Failed to save kick to CloudKit: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to save kick to CloudKit: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
 
     func saveSession(_ session: MealSession) async throws {
         guard isOnline else {
-            print("☁️ Offline - session will sync later")
+            #if DEBUG
+            logger.debug("Offline - session will sync later")
+            #endif
             return
         }
 
@@ -95,16 +118,22 @@ class CloudKitManager: ObservableObject {
 
         do {
             _ = try await privateDB.save(record)
-            print("☁️ Session saved to CloudKit: \(session.id)")
+            #if DEBUG
+            logger.debug("Session saved to CloudKit")
+            #endif
         } catch {
-            print("❌ Failed to save session to CloudKit: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to save session to CloudKit: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
 
     func saveBabyName(_ name: String) async throws {
         guard isOnline else {
-            print("☁️ Offline - name will sync later")
+            #if DEBUG
+            logger.debug("Offline - name will sync later")
+            #endif
             return
         }
 
@@ -119,9 +148,13 @@ class CloudKitManager: ObservableObject {
             record["lastUpdated"] = Date()
 
             _ = try await privateDB.save(record)
-            print("☁️ Baby name saved to CloudKit")
+            #if DEBUG
+            logger.debug("Baby name saved to CloudKit")
+            #endif
         } catch {
-            print("❌ Failed to save baby name: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to save baby name: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
@@ -130,7 +163,9 @@ class CloudKitManager: ObservableObject {
 
     func fetchAllKicks() async throws -> [Kick] {
         guard isOnline else {
-            print("☁️ Offline - returning empty array")
+            #if DEBUG
+            logger.debug("Offline - returning empty array")
+            #endif
             return []
         }
 
@@ -143,17 +178,23 @@ class CloudKitManager: ObservableObject {
                 guard let record = try? result.get() else { return nil }
                 return kickFromRecord(record)
             }
-            print("☁️ Fetched \(kicks.count) kicks from CloudKit")
+            #if DEBUG
+            logger.debug("Fetched \(kicks.count) kicks from CloudKit")
+            #endif
             return kicks
         } catch {
-            print("❌ Failed to fetch kicks: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to fetch kicks: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
 
     func fetchAllSessions() async throws -> [MealSession] {
         guard isOnline else {
-            print("☁️ Offline - returning empty array")
+            #if DEBUG
+            logger.debug("Offline - returning empty array")
+            #endif
             return []
         }
 
@@ -166,17 +207,23 @@ class CloudKitManager: ObservableObject {
                 guard let record = try? result.get() else { return nil }
                 return sessionFromRecord(record)
             }
-            print("☁️ Fetched \(sessions.count) sessions from CloudKit")
+            #if DEBUG
+            logger.debug("Fetched \(sessions.count) sessions from CloudKit")
+            #endif
             return sessions
         } catch {
-            print("❌ Failed to fetch sessions: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to fetch sessions: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
 
     func fetchBabyName() async throws -> String? {
         guard isOnline else {
-            print("☁️ Offline - returning nil")
+            #if DEBUG
+            logger.debug("Offline - returning nil")
+            #endif
             return nil
         }
 
@@ -187,10 +234,14 @@ class CloudKitManager: ObservableObject {
             return record["babyName"] as? String
         } catch let error as CKError where error.code == .unknownItem {
             // Record doesn't exist yet - this is normal for new users
-            print("☁️ No baby name in CloudKit yet")
+            #if DEBUG
+            logger.debug("No baby name in CloudKit yet")
+            #endif
             return nil
         } catch {
-            print("❌ Failed to fetch baby name: \(error.localizedDescription)")
+            #if DEBUG
+            logger.error("Failed to fetch baby name: \(error.localizedDescription)")
+            #endif
             throw error
         }
     }
@@ -199,7 +250,9 @@ class CloudKitManager: ObservableObject {
 
     func saveMultipleKicks(_ kicks: [Kick]) async throws {
         guard isOnline else {
-            print("☁️ Offline - kicks will sync later")
+            #if DEBUG
+            logger.debug("Offline - kicks will sync later")
+            #endif
             return
         }
 
@@ -221,14 +274,20 @@ class CloudKitManager: ObservableObject {
 
             do {
                 _ = try await privateDB.modifyRecords(saving: batch, deleting: [])
-                print("☁️ Saved batch \(i/batchSize + 1): \(batch.count) kicks")
+                #if DEBUG
+                logger.debug("Saved batch \(i/batchSize + 1): \(batch.count) kicks")
+                #endif
             } catch {
-                print("❌ Failed to save batch: \(error.localizedDescription)")
+                #if DEBUG
+                logger.error("Failed to save batch: \(error.localizedDescription)")
+                #endif
                 throw error
             }
         }
 
-        print("☁️ Saved \(records.count) kicks to CloudKit")
+        #if DEBUG
+        logger.debug("Saved \(records.count) kicks to CloudKit")
+        #endif
     }
 
     // MARK: - Helper Methods
@@ -244,15 +303,15 @@ class CloudKitManager: ObservableObject {
     }
 
     private func sessionFromRecord(_ record: CKRecord) -> MealSession? {
-        guard let id = record["id"] as? String,
+        guard let _ = record["id"] as? String,
               let mealTime = record["mealTime"] as? Date,
-              let startTime = record["startTime"] as? Date,
-              let endTime = record["endTime"] as? Date else {
+              let _ = record["startTime"] as? Date,
+              let _ = record["endTime"] as? Date else {
             return nil
         }
 
         // Create session with existing data
-        var session = MealSession(mealTime: mealTime)
+        let session = MealSession(mealTime: mealTime)
         // Note: MealSession doesn't allow modifying these properties after init
         // This is a limitation we'll need to handle
         return session
@@ -262,7 +321,9 @@ class CloudKitManager: ObservableObject {
 
     func syncAll() async {
         guard isOnline else {
-            print("☁️ Offline - skipping sync")
+            #if DEBUG
+            logger.debug("Offline - skipping sync")
+            #endif
             return
         }
 
@@ -270,18 +331,13 @@ class CloudKitManager: ObservableObject {
             syncState = .syncing
         }
 
-        do {
-            // This will be called by KickStorage after migration
-            print("☁️ Sync started")
+        #if DEBUG
+        logger.debug("Sync started")
+        #endif
 
-            await MainActor.run {
-                syncState = .idle
-                lastSyncDate = Date()
-            }
-        } catch {
-            await MainActor.run {
-                syncState = .error(error.localizedDescription)
-            }
+        await MainActor.run {
+            syncState = .idle
+            lastSyncDate = Date()
         }
     }
 }
