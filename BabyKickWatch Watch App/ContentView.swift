@@ -1,7 +1,4 @@
 import SwiftUI
-import os.log
-
-private let logger = Logger(subsystem: "com.daria.BabyKickTracker.watchkitapp", category: "ContentView")
 
 struct ContentView: View {
     @StateObject private var kickManager = KickManager.shared
@@ -94,11 +91,6 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
 
-                // Debug: show sync status
-                Text(kickManager.lastSyncStatus)
-                    .font(.system(size: 8))
-                    .foregroundColor(.gray)
-                    .lineLimit(1)
             }
             .padding(.bottom, 8)
             }
@@ -118,19 +110,7 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // Only ensure local data is loaded - sync handled by App-level scenePhase
-            #if DEBUG
-            logger.debug("View appeared - loading local data")
-            #endif
             kickManager.loadData()
-        }
-        .onChange(of: kickManager.todayKickCount) { oldValue, newValue in
-            // Debug: Log when count changes
-            #if DEBUG
-            if oldValue != newValue {
-                logger.debug("Today's count changed: \(oldValue) → \(newValue)")
-            }
-            #endif
         }
         // Note: Scene phase handling moved to App level for more reliable wrist-raise detection
     }
